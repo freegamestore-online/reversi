@@ -1,6 +1,14 @@
-import { useState, useCallback, useEffect, useMemo } from "react";
-import { GameShell, GameTopbar, GameAuth, GameButton } from "@freegamestore/games";
+import { useState, useCallback, useEffect, useMemo, useRef } from "react";
+import { GameShell, GameTopbar, GameAuth, GameButton, useGameSounds } from "@freegamestore/games";
 import { useHighScore } from "./hooks/useHighScore";
+
+type SoundsApi = ReturnType<typeof useGameSounds>;
+
+function AudioBridge({ apiRef }: { apiRef: React.MutableRefObject<SoundsApi | null> }) {
+  const sounds = useGameSounds();
+  apiRef.current = sounds;
+  return null;
+}
 
 type Player = 1 | 2; // 1 = black (you), 2 = white (AI)
 type Cell = 0 | Player;
@@ -104,6 +112,7 @@ export default function App() {
   const [turn, setTurn] = useState<Player>(1);
   const [gameOver, setGameOver] = useState(false);
   const { highScore: bestMargin, updateHighScore } = useHighScore("reversi-best-margin");
+  const audioRef = useRef<SoundsApi | null>(null);
 
   const moves = useMemo(() => legalMoves(board, turn), [board, turn]);
   const { black, white } = useMemo(() => count(board), [board]);
@@ -116,6 +125,8 @@ export default function App() {
       const nb = applyMove(board, r, c, 1, flips);
       setBoard(nb);
       setTurn(2);
+      audioRef.current?.playMove();
+      if (flips.length > 0) audioRef.current?.playClear();
     },
     [board, turn, moves, gameOver],
   );
@@ -141,6 +152,8 @@ export default function App() {
         const flips = flipsForMove(board, r, c, 2);
         setBoard(applyMove(board, r, c, 2, flips));
         setTurn(1);
+        audioRef.current?.playMove();
+        if (flips.length > 0) audioRef.current?.playClear();
       }, 450);
       return () => clearTimeout(t);
     }
