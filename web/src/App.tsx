@@ -215,6 +215,7 @@ export default function App() {
         />
       }
     >
+      <AudioBridge apiRef={audioRef} />
       <div className="flex flex-col items-center h-full gap-3 p-2 overflow-hidden">
         <p style={{ color: "var(--muted)", fontSize: "0.85rem" }}>{status}</p>
 
