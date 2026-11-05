@@ -1,7 +1,7 @@
 import { useState, useCallback, useEffect, useMemo, useRef } from "react";
 import { GameShell, GameTopbar, GameAuth, GameButton, useGameSounds } from "@freegamestore/games";
 import { useHighScore } from "./hooks/useHighScore";
-import { N, initialBoard, flipsForMove, legalMoves, applyMove, count, bestAIMove } from "./logic";
+import { N, initialBoard, flipsForMove, legalMoves, applyMove, count, bestAIMove, afterMove } from "./logic";
 import type { Board, Player } from "./logic";
 
 type SoundsApi = ReturnType<typeof useGameSounds>;
@@ -16,61 +16,44 @@ export default function App() {
   const [board, setBoard] = useState<Board>(initialBoard);
   const [turn, setTurn] = useState<Player>(1);
   const [gameOver, setGameOver] = useState(false);
+  /** The player whose turn was just skipped for lack of moves, for the status line. */
+  const [passed, setPassed] = useState<Player | null>(null);
   const { highScore: bestMargin, updateHighScore } = useHighScore("reversi-best-margin");
   const audioRef = useRef<SoundsApi | null>(null);
 
   const moves = useMemo(() => legalMoves(board, turn), [board, turn]);
   const { black, white } = useMemo(() => count(board), [board]);
 
+  const play = useCallback((nb: Board, mover: Player) => {
+    const next = afterMove(nb, mover);
+    setBoard(nb);
+    setTurn(next.turn);
+    setPassed(next.passed);
+    setGameOver(next.over);
+    audioRef.current?.playMove();
+  }, []);
+
   const handleCellClick = useCallback(
     (r: number, c: number) => {
       if (gameOver || turn !== 1) return;
       const flips = moves.get(`${r},${c}`);
       if (!flips) return;
-      const nb = applyMove(board, r, c, 1, flips);
-      setBoard(nb);
-      setTurn(2);
-      audioRef.current?.playMove();
-      if (flips.length > 0) audioRef.current?.playClear();
+      play(applyMove(board, r, c, 1, flips), 1);
     },
-    [board, turn, moves, gameOver],
+    [board, turn, moves, gameOver, play],
   );
 
-  // AI turn + pass detection + game over
+  // AI turn (passes and game over are resolved by afterMove when a move is made)
   useEffect(() => {
-    if (gameOver) return;
-    if (turn === 2) {
-      const m = legalMoves(board, 2);
-      if (m.size === 0) {
-        // White passes; if black can also not move → game over
-        if (legalMoves(board, 1).size === 0) {
-          setGameOver(true);
-        } else {
-          setTurn(1);
-        }
-        return;
-      }
-      const t = setTimeout(() => {
-        const move = bestAIMove(board);
-        if (!move) return;
-        const [r, c] = move;
-        const flips = flipsForMove(board, r, c, 2);
-        setBoard(applyMove(board, r, c, 2, flips));
-        setTurn(1);
-        audioRef.current?.playMove();
-        if (flips.length > 0) audioRef.current?.playClear();
-      }, 450);
-      return () => clearTimeout(t);
-    }
-    // Player's turn
-    if (turn === 1 && moves.size === 0) {
-      if (legalMoves(board, 2).size === 0) {
-        setGameOver(true);
-      } else {
-        setTurn(2);
-      }
-    }
-  }, [turn, board, gameOver, moves]);
+    if (gameOver || turn !== 2) return;
+    const t = setTimeout(() => {
+      const move = bestAIMove(board);
+      if (!move) return;
+      const [r, c] = move;
+      play(applyMove(board, r, c, 2, flipsForMove(board, r, c, 2)), 2);
+    }, 450);
+    return () => clearTimeout(t);
+  }, [turn, board, gameOver, play]);
 
   // Update best margin on game over
   useEffect(() => {
@@ -82,11 +65,14 @@ export default function App() {
   const reset = useCallback(() => {
     setBoard(initialBoard());
     setTurn(1);
+    setPassed(null);
     setGameOver(false);
   }, []);
 
   const status = gameOver
     ? black > white ? `You win ${black}–${white}` : black < white ? `AI wins ${white}–${black}` : `Draw ${black}–${white}`
+    : passed === 2 ? "AI has no moves — your move again"
+    : passed === 1 ? "You have no moves — AI plays again…"
     : turn === 1 ? "Your move (black)" : "AI thinking…";
 
   return (

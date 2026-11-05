@@ -94,3 +94,14 @@ export function bestAIMove(b: Board): [number, number] | null {
   }
   return pick;
 }
+
+/**
+ * Who plays after `mover` has moved: the opponent if they can, otherwise
+ * `mover` again (the opponent passes), otherwise the game is over.
+ */
+export function afterMove(b: Board, mover: Player): { turn: Player; passed: Player | null; over: boolean } {
+  const opp: Player = mover === 1 ? 2 : 1;
+  if (legalMoves(b, opp).size > 0) return { turn: opp, passed: null, over: false };
+  if (legalMoves(b, mover).size > 0) return { turn: mover, passed: opp, over: false };
+  return { turn: opp, passed: null, over: true };
+}
